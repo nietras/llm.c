@@ -1,4 +1,14 @@
+; IDE Cache
 .vscode/
+.vs/
+
+; Compiled output
+*.obj
+*.pdb
+*.ilk
+*.exe
+
+; data
 data/
 gpt2_124M.bin
 gpt2_124M_debug_state.bin
