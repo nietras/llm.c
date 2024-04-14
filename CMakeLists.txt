@@ -21,6 +21,11 @@ else()
     message(WARNING "OOPS Compiling without OpenMP support")
 endif()
 
+if(MSVC)
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} /arch:AVX2")
+endif()
+
+
 # Add executable targets
 add_executable(train_gpt2 train_gpt2.c)
 add_executable(test_gpt2 test_gpt2.c)
