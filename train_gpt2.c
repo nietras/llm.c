@@ -170,8 +170,9 @@ void matmul_forward(float* out,
     // OC is short for "output channels"
     // inp is (B,T,C), weight is (OC, C), bias is (OC)
     // out will be (B,T,OC)
+    int b;
     #pragma omp parallel for collapse(2)
-    for (int b = 0; b < B; b++) {
+    for (b = 0; b < B; b++) {
         for (int t = 0; t < T; t++) {
             float* out_bt = out + b * T * OC + t * OC;
             float* inp_bt = inp + b * T * C + t * C;
@@ -195,8 +196,9 @@ void matmul_backward(float* dinp, float* dweight, float* dbias,
     // but that doesn't afford an efficient parallelization strategy
 
     // backward into inp first, parallelize over B,T
+    int b;
     #pragma omp parallel for collapse(2)
-    for (int b = 0; b < B; b++) {
+    for (b = 0; b < B; b++) {
         for (int t = 0; t < T; t++) {
             float* dout_bt = dout + b * T * OC + t * OC;
             float* dinp_bt = dinp + b * T * C + t * C;
@@ -210,8 +212,9 @@ void matmul_backward(float* dinp, float* dweight, float* dbias,
         }
     }
     // backward into weight/bias, parallelize over output channels OC
+    int o;
     #pragma omp parallel for
-    for (int o = 0; o < OC; o++) {
+    for (o = 0; o < OC; o++) {
         for (int b = 0; b < B; b++) {
             for (int t = 0; t < T; t++) {
                 float* dout_bt = dout + b * T * OC + t * OC;
@@ -241,8 +244,9 @@ void attention_forward(float* out, float* preatt, float* att,
     int hs = C / NH; // head size
     float scale = 1.0 / sqrtf(hs);
 
+    int b;
     #pragma omp parallel for collapse(3)
-    for (int b = 0; b < B; b++) {
+    for (b = 0; b < B; b++) {
         for (int t = 0; t < T; t++) {
             for (int h = 0; h < NH; h++) {
                 float* query_t = inp + b * T * C3 + t * C3 + h * hs;
@@ -402,8 +406,9 @@ void residual_backward(float* dinp1, float* dinp2, float* dout, int N) {
 void softmax_forward(float* probs, float* logits, int B, int T, int V) {
     // output: probs are (B,T,V) of the probabilities (sums to 1.0 in each b,t position)
     // input: logits is (B,T,V) of the unnormalized log probabilities
+    int b;
     #pragma omp parallel for collapse(2)
-    for (int b = 0; b < B; b++) {
+    for (b = 0; b < B; b++) {
         for (int t = 0; t < T; t++) {
             // probs <- softmax(logits)
             float* logits_bt = logits + b * T * V + t * V;
