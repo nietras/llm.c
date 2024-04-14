@@ -13,9 +13,22 @@ There will be other versions of this code that specialize it and make it fast.
 #include <math.h>
 #include <time.h>
 #include <string.h>
-#include <unistd.h>
+#if defined _WIN32
+    #include "win.h"
+#else
+    #include <unistd.h>
+#endif
 #ifdef OMP
 #include <omp.h>
+#endif
+
+#if defined _WIN32
+int clock_gettime(int clk_id, struct timespec* tp) {
+    uint32_t ticks = GetTickCount();
+    tp->tv_sec = ticks / 1000;
+    tp->tv_nsec = (ticks % 1000) * 1000000;
+    return 0;
+}
 #endif
 
 // ----------------------------------------------------------------------------
@@ -1073,7 +1086,8 @@ int main() {
 
     // some memory for generating samples from the model
     unsigned long long rng_state = 1337;
-    const int gen_max_length = 64; // during inference step we'll generate sequences of this many tokens
+    // during inference step we'll generate sequences of this many tokens
+#define gen_max_length 64
     int gen_tokens[gen_max_length];
 
     // train
