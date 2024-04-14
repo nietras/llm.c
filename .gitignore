@@ -1,6 +1,7 @@
 ; IDE Cache
 .vscode/
 .vs/
+env/
 
 ; Compiled output
 *.obj
