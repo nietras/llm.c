@@ -5,6 +5,7 @@ env/
 out/
 
 ; Compiled output
+*.asm
 *.obj
 *.pdb
 *.ilk

@@ -173,7 +173,8 @@ void matmul_forward(float* out,
     int b;
     #pragma omp parallel for collapse(2)
     for (b = 0; b < B; b++) {
-        for (int t = 0; t < T; t++) {
+        int t;
+        for (t = 0; t < T; t++) {
             float* out_bt = out + b * T * OC + t * OC;
             float* inp_bt = inp + b * T * C + t * C;
             for (int o = 0; o < OC; o++) {
@@ -199,7 +200,8 @@ void matmul_backward(float* dinp, float* dweight, float* dbias,
     int b;
     #pragma omp parallel for collapse(2)
     for (b = 0; b < B; b++) {
-        for (int t = 0; t < T; t++) {
+        int t;
+        for (t = 0; t < T; t++) {
             float* dout_bt = dout + b * T * OC + t * OC;
             float* dinp_bt = dinp + b * T * C + t * C;
             for (int o = 0; o < OC; o++) {
@@ -247,8 +249,10 @@ void attention_forward(float* out, float* preatt, float* att,
     int b;
     #pragma omp parallel for collapse(3)
     for (b = 0; b < B; b++) {
-        for (int t = 0; t < T; t++) {
-            for (int h = 0; h < NH; h++) {
+        int t;
+        for (t = 0; t < T; t++) {
+            int h;
+            for (h = 0; h < NH; h++) {
                 float* query_t = inp + b * T * C3 + t * C3 + h * hs;
                 float* preatt_bth = preatt + b*NH*T*T + h*T*T + t*T;
                 float* att_bth = att + b*NH*T*T + h*T*T + t*T;
@@ -409,7 +413,8 @@ void softmax_forward(float* probs, float* logits, int B, int T, int V) {
     int b;
     #pragma omp parallel for collapse(2)
     for (b = 0; b < B; b++) {
-        for (int t = 0; t < T; t++) {
+        int t;
+        for (t = 0; t < T; t++) {
             // probs <- softmax(logits)
             float* logits_bt = logits + b * T * V + t * V;
             float* probs_bt = probs + b * T * V + t * V;
