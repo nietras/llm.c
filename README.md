@@ -2,13 +2,14 @@
 
 LLM training in simple, pure C/CUDA. There is no need for 245MB of PyTorch or 107MB of cPython. For example, training GPT-2 (CPU, fp32) is ~1,000 lines of clean code in a single file. It compiles and runs instantly, and exactly matches the PyTorch reference implementation. I chose GPT-2 as the first working example because it is the grand-daddy of LLMs, the first time the modern stack was put together.
 
-Currently, I am working on:
+Currently, we are working on:
 
-- direct CUDA implementation, which will be significantly faster and probably come close to PyTorch.
-- speed up the CPU version with SIMD instructions, AVX2 on x86 / NEON on ARM (e.g. Apple Silicon).
-- more modern architectures, e.g. Llama2, Gemma, etc.
+- optimize the CUDA implementation to compete with PyTorch
+- lower the precision from fp32 to mixed precision training
+- reproduce the GPT-2 training run (data, evals)
+- more modern architectures, Llama 2, Gemma, Mistral, etc.
 
-For the repo, I'd like to maintain both clean, simple reference implementations alongside a also lot more optimized versions that can come close to PyTorch, but in a tiny fraction of the code and dependencies.
+I'd like this repo to only maintain C and CUDA code. Ports of this repo to other languages are very welcome, but should be done in separate repos, and then I am happy to link to them below in the "notable forks" section, just like I did in [llama2.c notable forks](https://github.com/karpathy/llama2.c/tree/master?tab=readme-ov-file#notable-forks).
 
 ## quick start
 
@@ -33,7 +34,7 @@ In principle we'd be ready to train the model right here. However the baseline C
 python train_gpt2.py
 ```
 
-You'll recognize this code from nanoGPT as a simple GPT-2 reference implementation in PyTorch. This script will download the GPT-2 (124M) model, overfit a single batch of data for 10 iterations, run a few steps of generation, and most importantly it will save two files: 1) the `gpt2_124M.bin` file that contains the raw model weights for loading in C, and `gpt2_124M_debug_state.bin`, which also contains more debug state: the inputs, targets, logits and loss. This is very useful for debugging C code, for unit testing, and making sure we're exactly matching the PyTorch reference implementation. For now all we care about are the model weights in `gpt2_124M.bin`. We can now initialize with them and train in raw C. First compile the code:
+You'll recognize this code from nanoGPT as a simple GPT-2 reference implementation in PyTorch. This script will download the GPT-2 (124M) model, overfit a single batch of data for 10 iterations, run a few steps of generation, and most importantly it will save three files: 1) the `gpt2_124M.bin` file that contains the raw model weights for loading in C, 2) the `gpt2_124M_debug_state.bin`, which also contains more debug state: the inputs, targets, logits and loss (useful for debugging and unit testing), and finally 3) the `gpt2_tokenizer.bin` which stores the vocabulary for the GPT-2 tokenizer, translating token ids to byte sequences of UTF-8 encoded string pieces. We can now initialize with these model weights and continue training in raw C. First compile the code:
 
 ```bash
 make train_gpt2
@@ -43,9 +44,9 @@ You can have a look inside the `Makefile` and its comments. It will try to autod
 
 ```
 # try this first
-CFLAGS = -Ofast -fno-fast-math -Wno-unused-result
+CFLAGS="-Ofast -fno-finite-math-only -Wno-unused-result -march=native" make train_gpt2
 # try this second
-CFLAGS = -O3 -Wno-unused-result
+CFLAGS="-O3 -Wno-unused-result -march=native" make train_gpt2
 ```
 
 Once `train_gpt2` is compiled, you can run it:
@@ -75,23 +76,9 @@ step 3: train loss 4.600470 (took 1290.761000 ms)
 ... (trunctated) ...
 step 39: train loss 3.970751 (took 1323.779000 ms)
 val loss 4.107781
-generated: 50256 16773 18162 21986 11 198 13681 263 23875 198 3152 262 11773 2910 198 1169 6002 6386 2583 286 262 11858 198 20424 428 3135 7596 995 3675 13 198 40 481 407 736 17903 11 329 703 6029 706 4082 198 42826 1028 1128 633 263 11 198 10594 407 198 2704 454 680 1028 262 1027 28860 286 198 3237 323
-step 40: train loss 4.377757 (took 1366.368000 ms)
-```
-
-The generation just gives you the token ids for now, which we have to decode back to text. We can implement this in C quite easily also, because decoding is very straight-forward, it's just string chunk lookups and prints. For now we can use tiktoken:
-
-```python
-import tiktoken
-enc = tiktoken.get_encoding("gpt2")
-ptok = lambda x: print(enc.decode(list(map(int, x.strip().split()))))
-ptok("50256 16773 18162 21986 11 198 13681 263 23875 198 3152 262 11773 2910 198 1169 6002 6386 2583 286 262 11858 198 20424 428 3135 7596 995 3675 13 198 40 481 407 736 17903 11 329 703 6029 706 4082 198 42826 1028 1128 633 263 11 198 10594 407 198 2704 454 680 1028 262 1027 28860 286 198 3237 323")
-```
-
-which prints:
-
-```
-<|endoftext|>Come Running Away,
+generating:
+---
+Come Running Away,
 Greater conquer
 With the Imperial blood
 the heaviest host of the gods
@@ -101,9 +88,10 @@ Netflix against repounder,
 will not
 flourish against the earlocks of
 Allay
+---
 ```
 
-I like how Netflix comes up, it's clear that the shadow of the training past is still lurking in the model. I did not attempt to tune the finetuning hyperparameters so it's quite likely this can be improved quite a bit, most likely especially if one was to train a bit longer.
+I like how Netflix comes up, it's clear that the shadow of the training past is still lurking in the model. I did not attempt to tune the finetuning hyperparameters so it's quite likely this can be improved quite a bit. I also noticed that slightly different platforms (e.g. MacOS / Linux) will (sadly) give very slightly different results, so perhaps don't expect to get the exact numbers or generation above. Also note that if you are seeing token ids instead of text in the generation, it might be because your code is out of date, as Tokenizer decoding was added April 14, 2024. `git pull` the updates, and then re-run `python train_gpt2.py`, which will now also save the tokenizer, which C can read and then use to print text instead of token ids.
 
 ## test
 
@@ -122,23 +110,63 @@ I attached a very small tutorial here, in [doc/layernorm/layernorm.md](doc/layer
 
 ## cuda
 
-CUDA port is WIP, I'm keeping the growing collection of kernels in the `dev` folder, e.g. see [dev/cuda/README.md](dev/cuda/README.md).
+As of April 17, 2024 the full training loop is now implemented in pure CUDA in one file, but has not been optimized yet. The way we organize code is that we have a growing collection of kernels of increasing complexity in the `dev/cuda` folder, see [dev/cuda/README.md](dev/cuda/README.md). We then copy paste the best kernels into the main training loop in the single training file `train_gpt2cu.cu`.
 
-As of April 10, 2024 the full forward pass is now implemented in pure CUDA in one file. First we can check that all of the logits and the final loss matches the PyTorch reference:
+**Correctness**. First, we can do 10 iterations of training and verify that our code exactly matches and preproduces the numbers from PyTorch:
 
 ```bash
 make test_gpt2cu
 ./test_gpt2cu
 ```
 
-This prints `overall okay: 1`. Now that we are calculating all the right values, we can time our code. We can't train yet because the backward pass + update are not implemented yet, but we can run the training loop and see the timings:
+This prints `overall okay: 1`. So the forward activations, backward gradients, and the individual loss values for 10 iterations all match exactly.
+
+**Training**. To train GPT-2 in a single file of CUDA, run the train script:
 
 ```bash
 make train_gpt2cu
 ./train_gpt2cu
 ```
 
-This will run GPT-2 (124M) in one file of pure CUDA (see [train_gpt2.cu](train_gpt2.cu)), using batch size 4 and sequence length 1024. This will print a bunch of hyperparameters and then the "training":
+This will load the tiny_shakespeare dataset validation and training splits. At the default settings of B=4, T=1024, there are 8 validation batches and 74 training batches. The script is currently configured to do a single epoch of finetuning with learning rate 1e-4, and along the way it evaluates the validation performance and generates samples, e.g.:
+
+```
+step 1/74: train loss 4.367631 (424.545089 ms)
+step 2/74: train loss 4.031261 (418.123055 ms)
+step 3/74: train loss 4.034113 (418.248729 ms)
+step 4/74: train loss 3.859862 (419.620396 ms)
+...
+step 72/74: train loss 3.085115 (430.124835 ms)
+step 73/74: train loss 3.667760 (428.690927 ms)
+step 74/74: train loss 3.467514 (428.090348 ms)
+val loss 3.516422
+generating:
+---
+?Where will you go?
+I take you wherefore I can, myself, and must.
+I sat down at a full's seven, and here was my mate;
+And being gone to find some gentleman to his place
+Zilled me with his eagle; and thus to find my light
+```
+
+So as currently configured, we come down to validation loss of 3.51 and can generate okay samples. This runs on my A100 in about ~30 seconds. Even so, this training loop in PyTorch is about 80ms/iteration, so we are currently ~5X slower. The kernels are being actively optimized and worked on and we aspire to reach the same vicinity soon^TM.
+
+**Timing**. Finally we can time the code and compare the speed to PyTorch. Because the backward pass CUDA kernels are still very new and being optimized, I'd recommend turning off the backward + update in `train_gpt2.cu`:
+
+```
+// gpt2_zero_grad(&model);
+// gpt2_backward(&model);
+// gpt2_update(&model, 1e-4f, 0.9f, 0.999f, 1e-8f, 0.0f, step+1);
+```
+
+And then re-compile and run just the forward pass in a loop:
+
+```bash
+make train_gpt2cu
+./train_gpt2cu
+```
+
+This will print a bunch of hyperparameters and then you'll see the loop:
 
 ```
 val loss 4.517179
@@ -168,6 +196,22 @@ python train_gpt2.py --inference_only 1 --write_tensors 0 --sequence_length 1024
 ```
 
 The time drops down to 26.2ms/iteration. So at the current 26.2ms/iteration we, amusingly and right now, have an identical running time. This somewhat makes sense because most of the FLOPs are in the matmul, and we both call about the same kernels. The remainder of the difference is likely our self-attention implementation, and possibly the round trips for GeLU, and permute/unpermute.
+
+## repo philosophy
+
+A few more words on what I want this repo to be:
+
+First, I want `llm.c` to be a place for education. E.g. our `dev/cuda` folder is a place for a library of kernels for all the layers that are manually hand-written and very well documented, starting from very simple kernels all the way to more complex / faster kernels. If you have a new kernel with various different tradeoffs, please feel free to contribute it here.
+
+That said, I also want `llm.c` to be very fast too, even practically useful to train networks. E.g. to start, we should be able to reproduce the big GPT-2 (1.6B) training run. This requires that we incorporate whatever fastest kernels there are, including the use of libraries such as cuBLAS, cuBLASLt, CUTLASS, cuDNN, etc. I also think doing so serves an educational purpose to establish an expert upper bound, and a unit of measurement, e.g. you could say that your manually written kernels are 80% of cuBLAS speed, etc. Then you can choose to do a super fast run, or you can choose to "drag and drop" whatever manual kernels you wish to use, and run with those.
+
+However, as a constraint, I want to keep the mainline `llm.c` in the root folder simple and readable. If there is a PR that e.g. improves performance by 2% but it "costs" 500 lines of complex C code, and maybe an exotic 3rd party dependency, I may reject the PR because the complexity is not worth it. In that sense I'd be ok to only be at e.g. 90% of PyTorch speed, if it means we can remain at ~2,000 readable lines of code with minimal exotic dependencies. As a concrete example - making cuBLAS for matmuls the default in the root training loop is a no-brainer: it makes the mainline code much faster, it is a single line of interpretable code, and it is a very common dependency. On the side of this, we can have manual implementations that can compete with cuBLAS in `dev/cuda`.
+
+Lastly, I will be a lot more sensitive to complexity in the root folder of the project, which contains the main / default files of the project. In comparison, the `dev/` folder is a bit more of a scratch space for us to develop a library of kernels or classes and share useful or related or educational code, and some of this code could be ok to be (locally) complex.
+
+## notable forks
+
+will go here, similar to [llama2.c notable forks](https://github.com/karpathy/llama2.c/tree/master?tab=readme-ov-file#notable-forks)
 
 ## discussions
 
