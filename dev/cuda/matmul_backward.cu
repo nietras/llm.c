@@ -2,7 +2,7 @@
 Kernels for matmul backward pass.
 
 Compile example:
-nvcc -O3 --use_fast_math -Xcompiler -fopenmp matmul_backward.cu -o matmul_backward -lcublas
+nvcc -O3 --use_fast_math -lcublas -lcublasLt -Xcompiler -fopenmp matmul_backward.cu -o matmul_backward
 
 OMP_NUM_THREADS=32 ./matmul_backward 1
 */
@@ -13,11 +13,6 @@ OMP_NUM_THREADS=32 ./matmul_backward 1
 #include <cuda_runtime.h>
 #include <omp.h>
 #include "common.h"
-
-// ----------------------------------------------------------------------------
-// CUDA / cuBLAS setup
-
-static cublasHandle_t cublas_handle;
 
 // ----------------------------------------------------------------------------
 // CPU code reference
@@ -47,7 +42,7 @@ void matmul_backward_cpu(float* dinp, float* dweight, float* dbias,
     // backward into weight/bias, parallelize over output channels OC
     #pragma omp parallel for
     for (int o = 0; o < OC; o++) {
-        double sum = 0.0f;
+        double sum = 0.0;
         for (int b = 0; b < B; b++) {
             for (int t = 0; t < T; t++) {
                 float* dout_bt = dout + b * T * OC + t * OC;
@@ -71,7 +66,7 @@ void matmul_backward_cpu(float* dinp, float* dweight, float* dbias,
 __global__ void matmul_backward_bias_kernel_naive(float* dbias, const float* dout, int B, int T, int OC) {
     int o = blockIdx.x * blockDim.x + threadIdx.x;
     if (o < OC) {
-        double sum = 0.0f;
+        double sum = 0.0;
         for (int b = 0; b < B; b++) {
             for (int t = 0; t < T; t++) {
                 sum += dout[b * T * OC + t * OC + o];
@@ -89,7 +84,7 @@ __global__ void matmul_backward_bias_kernel_faster(float* dbias, const float* do
     int block_size = blockDim.x;
     const float* x = dout + o;
     // thread coarsening
-    double sum = 0.0f;
+    double sum = 0.0;
     for (int i = tid; i < B * T; i += block_size) {
         sum += x[i * OC];
     }

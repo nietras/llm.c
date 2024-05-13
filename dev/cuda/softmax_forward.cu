@@ -2,7 +2,7 @@
 Kernels for softmax forward pass.
 
 Compile example:
-nvcc -O3 --use_fast_math softmax_forward.cu -o softmax_forward
+nvcc -O3 --use_fast_math -lcublas -lcublasLt softmax_forward.cu -o softmax_forward
 
 version 1 is naive port from CPU code to kernel: parallelizes over B,T, loops over C
 ./softmax_forward 1
@@ -182,14 +182,6 @@ __device__ float warpReduceMax(float val) {
     return val;
 }
 
-// warp-level reduction for summing values
-__device__ float warpReduceSum(float val) {
-    for (int offset = 16; offset > 0; offset /= 2) {
-        val += __shfl_down_sync(0xFFFFFFFF, val, offset);
-    }
-    return val;
-}
-
 __global__ void softmax_forward_kernel3(float* out, const float* inp, int N, int C) {
     // kernel must use block size of 32
     extern __shared__ float shared[];
@@ -327,7 +319,7 @@ __global__ void softmax_forward_online_kernel1(float* out, const float* inp, int
         float* out_row = out + i * C;
 
         float maxval = -INFINITY;
-        double sum = 0.0f;
+        double sum = 0.0;
         for (int j = 0; j < C; j++) {
             float maxval_prev = maxval;
 			if (inp_row[j] > maxval) {
