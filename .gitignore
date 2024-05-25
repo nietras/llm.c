@@ -35,6 +35,7 @@ dev/cuda/global_norm
 *.exe
 *.o
 *.asm
+*.pdb
 
 # log files
 *.log
