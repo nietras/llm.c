@@ -208,7 +208,7 @@ int main(int argc, char *argv[]) {
         allok = allok && step_loss_ok;
 
         // print the timing information at the end
-        printf("step %d: loss %f OK = %d (%5.0f ms = Forward %4.0f ms ZeroGrad %2.0f ms Backward %4.0f ms Update %4.0f ms)\n", 
+        printf("step %d: loss %f OK = %d (%5.0f ms = forward %4.0f ms zero_grad %2.0f ms backward %4.0f ms update %4.0f ms)\n", 
             step, model.mean_loss, step_loss_ok, 
             total_ms, forward_ms, zero_ms, backward_ms, update_ms);
     }
